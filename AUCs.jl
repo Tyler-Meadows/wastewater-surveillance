@@ -60,7 +60,7 @@ for runID in 1:50
     
 end
 
-@df AUC_Data boxplot(:Day,:AUC,
+@df AUC_Frame boxplot(:Day,:AUC,
                 label = nothing,
                 xlabel = "Days Forecast",
                 ylabel = "AUC")

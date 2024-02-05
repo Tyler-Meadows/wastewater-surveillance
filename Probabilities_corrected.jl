@@ -8,7 +8,7 @@ using StatsPlots
 includet("SIRModel.jl")
 ## Load data 
 
-Towns = ["Genesee","Juliaetta","Kendrick","Troy","Potlatch"]
+Towns = ["Small_City","Rural_Town_1","Rural_Town_2","Rural_Town_3","Rural_Town_4","Rural_Town_5"]
 for Town in Towns
     print(Town)
     case_counts = XLSX.readtable("data/case_number_by_county.xlsx","Sheet1") |> DataFrame
@@ -33,12 +33,12 @@ for Town in Towns
     !issorted(town_data.date) && sort!(town_data, :date)
     transform!(town_data, "$Town" => (x->Rolling_sum(x,8)) => :cases)
 
-    populations = Dict("Troy" => 906,
-                    "Moscow" => 25850,
-                    "Genesee" => 1044,
-                    "Potlatch" => 744,
-                    "Juliaetta" => 632,
-                    "Kendrick" => 291)
+    populations = Dict("Rural_Town_3" => 906,
+                    "Small_City" => 25850,
+                    "Rural_Town_1" => 1044,
+                    "Rural_Town_2" => 744,
+                    "Rural_Town_4" => 632,
+                    "Rural_Town_5" => 291)
     transform!(town_data,:population_served => (x->coalesce.(x,populations[Town])) => :population_served)
 
     #=
@@ -60,7 +60,7 @@ for Town in Towns
     Adjusted = WW_stats_parameters.*(128)/3.78541e6
 
     ## some flow rates are missing, use most recent future measurement
-    ## Kendrick and Troy have no flow_rate measurements at all
+    ## Rural_Town_5 and Rural_Town_3 have no flow_rate measurements at all
 
     town_data.flow_rate = tryparse.(Float64,town_data.flow_rate)
     town_data.flow_rate = replace(town_data.flow_rate, nothing => missing)
@@ -156,7 +156,7 @@ for Town in Towns
     CSV.write("output/$(Town)_probabilities_corrected.csv",ForThibault)
 end
 
-df = CSV.read("output/Genesee_probabilities_corrected.csv",DataFrame)
+df = CSV.read("output/Rural_Town_1_probabilities_corrected.csv",DataFrame)
 w = Matrix(df[:,1:end-1])
 t = df[:,end]
 heatmap(t,axes(w,2),sqrt.(w)',

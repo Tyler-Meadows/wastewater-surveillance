@@ -2,7 +2,8 @@
 using CSV, DataFrames
 using ParticleFilter
 using Parameters
-using Plots
+using StatsBase, Distributions
+using Plots, LaTeXStrings
 include("SIRModel.jl")
 
 #Import Data
@@ -16,6 +17,12 @@ function MeasurementModel(measurement::DataFrameRow,part::Particle)
     likelihood(Gamma(α,θ),measurement.V,part.state[2])
 end
 #Create Particle Filter History
+# Distribution parameters
+f(t) = 71.97*t/(16+t^2)
+E_I = 1/3*sum(f.(0.0:0.001:3.0).*0.001) |> (x-> 10^x)
+V_I = 0.5*E_I
+
+
 pfilt = Filter(1,[],sol,MeasurementModel,SEIR!,init_filter!)
 pars = (β = 0.2, τ = 3, γ = 8)
 pfilt.T = 1
@@ -81,7 +88,9 @@ end
 end
 
 plot()
-for days in 1:2:3
+
+Roc_data = []
+for days in 1:2:15
     changes_predicted,T,range  = projected_changes(history,days)
 
     prob_increase = sum(changes_predicted[:,0:end,3],dims=2)
@@ -93,7 +102,7 @@ for days in 1:2:3
     changes_real = sign.(changes_real)
     count(changes_real .≥ 0)
 
-    Roc_data = []
+
     for α in 0:0.001:1.0
         Rocs = DataStream()
         for j in eachindex(changes_real)
@@ -108,5 +117,8 @@ for days in 1:2:3
     Roc_data = hcat(Roc_data...)
     plot!(Roc_data[1,:],Roc_data[2,:], label = "$days days")
 end
-plot!(xlabel = "False Increases", ylabel = "True Increases")
-savefig("figures/Sythetic_ROC.png")
+plot!(xlabel = L"(1-\alpha)", ylabel = "True Increases")
+plot!(dpi = 300)
+savefig("figures/Sythetic_ROC.pdf")
+
+CSV.write("output/ROC_data.csv",ROC_data)

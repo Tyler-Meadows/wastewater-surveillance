@@ -11,38 +11,14 @@ Towns = ["Small_City","Rural_Town_1","Rural_Town_2","Rural_Town_3","Rural_Town_4
 
 
 for Town in Towns
-    case_counts = XLSX.readtable("data/case_number_by_county.xlsx","Sheet1") |> DataFrame
-    for name in names(case_counts)[2:end]
-        rename!(case_counts, name => name[1:end-6])
-    end
+    town_data = CSV.File("data/$(Town)_town_data.csv") |> DataFrame
 
-
-    ww_meta_data = CSV.File("data/samples.QL.csv") |> DataFrame
-    rename!(ww_meta_data, :sample_collect_date => :date)
-    filter!(x->x.pcr_gene_target == "N1",ww_meta_data )
-    sort!(ww_meta_data,:date)
-    unique!(ww_meta_data)
-    filter!(x->!ismissing(x.location),ww_meta_data)
-    filter!(x->x.location == Town,ww_meta_data)
-    transform!(ww_meta_data,:flow_rate => (x-> tryparse.(Float64,x)) => :flow_rate)
-    ## Full range of dates
-    town_data = DataFrame(date = ww_meta_data.date[1]:Day(1):ww_meta_data.date[end])
-    # Filter out non-town locations
-    town_data = leftjoin(town_data,ww_meta_data, on= :date)
-    filter!(x-> x.date ∈ town_data.date,case_counts)
-    select!(case_counts,["date",Town])
-    town_data = leftjoin(town_data,case_counts, on = :date)
-    town_data[:,"$Town"] = coalesce.(town_data[:,"$Town"],0)
-    !issorted(town_data.date) && sort!(town_data, :date)
-    transform!(town_data, "$Town" => (x->Rolling_sum(x,10)) => :cases)
-
-
-    populations = Dict("Troy" => 862,
-                    "Moscow" => 24000,
-                    "Genesee" => 946,
-                    "Potlatch" => 994,
-                    "Juliaetta" => 609,
-                    "Kendrick" => 369)
+    populations = Dict("Rural_Town_3" => 906,
+                    "Small_City" => 25850,
+                    "Rural_Town_1" => 1044,
+                    "Rural_Town_2" => 744,
+                    "Rural_Town_4" => 632,
+                    "Rural_Town_5" => 291)
     transform!(town_data,:population_served => (x->coalesce.(x,populations[Town])) => :population_served)
 
         #=
@@ -57,37 +33,11 @@ for Town in Towns
 
         =#
         f(t) = 71.97*t/(16+t^2)
-        E_I = 1/8*sum(f.(3.0:0.001:11.0).*0.001) |> (x-> 10^x)
+        E_I = 1/3*sum(f.(0.0:0.001:3.0).*0.001) |> (x-> 10^x)
         V_I = 0.5*E_I
-        #- Generate synthetic data -#
+        #- Measurement parameters -#
         WW_stats_parameters = [E_I, V_I]
         Adjusted = WW_stats_parameters.*(128)/3.78541e6
-
-
-    ## some flow rates are missing, use most recent future measurement
-    ## Kendrick and Troy have no flow_rate measurements at all
-
-    town_data.flow_rate = replace(town_data.flow_rate, nothing => missing)
-    mean_flow = mean(skipmissing(town_data.flow_rate))
-    town_data.flow_rate = coalesce.(town_data.flow_rate,mean_flow)
-
-
-    # Sometimes there are more than one measurement per day. Average them
-
-    avg_vec = Union{Missing,Float64}[]
-    for row in eachrow(town_data)
-        df = filter(x-> row.date - Day(10) ≤ x.date ≤ row.date, town_data)
-        avg = mean(skipmissing(df.concentration_per_liter))
-        push!(avg_vec, avg)
-    end
-    town_data.concentration_avg = avg_vec
-
-    town_data_grouped = groupby(town_data,:date)
-    town_data = combine(town_data_grouped,
-                        [:flow_rate,
-                        :concentration_per_liter,
-                        :population_served,
-                        :cases,:concentration_avg] .=> mean .=> [:flow_rate,:concentration_per_liter,:population_served,:cases,:concentration_avg])
 
     ## Measurement Model
     function Measure_cases(measurement::DataFrameRow,part::Particle)
@@ -107,18 +57,18 @@ for Town in Towns
         return l1
     end
 
-    outbreak_start = Dict("Moscow" => Date(2022,01,04),
-                        "Genesee" => Date(2022,01,06),
-                        "Potlatch" => Date(2022,01,01),
-                        "Troy" => Date(2022,01,14),
-                        "Juliaetta" => Date(2022,01,05),
-                        "Kendrick" => Date(2022,01,12))
-    outbreak_peak = Dict("Moscow" => Date(2022,01,18),
-                        "Genesee" => Date(2022,01,09),
-                        "Potlatch" => Date(2022,01,25),
-                        "Troy" => Date(2022,01,18),
-                        "Juliaetta" => Date(2022,01,11),
-                        "Kendrick" => Date(2022,01,27))
+    outbreak_start = Dict("Small_City" => Date(2022,01,04),
+                        "Rural_Town_1" => Date(2022,01,06),
+                        "Rural_Town_2" => Date(2022,01,01),
+                        "Rural_Town_3" => Date(2022,01,14),
+                        "Rural_Town_4" => Date(2022,01,05),
+                        "Rural_Town_5" => Date(2022,01,12))
+    outbreak_peak = Dict("Small_City" => Date(2022,01,18),
+                        "Rural_Town_1" => Date(2022,01,09),
+                        "Rural_Town_2" => Date(2022,01,25),
+                        "Rural_Town_3" => Date(2022,01,18),
+                        "Rural_Town_4" => Date(2022,01,11),
+                        "Rural_Town_5" => Date(2022,01,27))
     subset = filter(x->x.date ≤ outbreak_peak[Town]+Day(4),town_data)
     !issorted(subset,:date) && sort!(subset,:date)
 

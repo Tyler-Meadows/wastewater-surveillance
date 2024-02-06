@@ -9,6 +9,29 @@ includet("SIRModel.jl")
 ## Load data 
 Towns = ["Small_City","Rural_Town_1","Rural_Town_2","Rural_Town_3","Rural_Town_4","Rural_Town_5"]
 
+function Measure_virus(measurement::DataFrameRow,part::Particle)
+    #ismissing(measurement.concentration_per_liter) && return part.weight
+    @unpack μ,σ,p = part.stats_pars
+    V = measurement.flow_rate*measurement.concentration_per_liter
+    l1 =  likelihood(Gamma(rate_and_scale(μ,σ)...),V,part.state[2])
+    return l1
+end
+
+function probabilities(History::FilterHistory)
+    NT = length(History.T)
+    N = sum(History.particles[1][1].state)+1
+    probs = zeros(Float64,(NT,Int(N),length(History.particles[1][1].state)))
+    for t in 1:NT
+        for p in History.particles[t]
+            for (j,s) in enumerate(Int.(p.state))
+            probs[t,s+1,j] += p.weight
+            end
+        end
+    end
+    return probs./sum(probs,dims=2)    
+end
+
+
 for Town in Towns
     print(Town,"\n")
     town_data = CSV.File("data/$(Town)_town_data.csv") |> DataFrame
@@ -32,13 +55,7 @@ for Town in Towns
     Adjusted = WW_stats_parameters.*(128)/3.78541e6
 
     ## Measurement Model
-    function Measure_virus(measurement::DataFrameRow,part::Particle)
-        #ismissing(measurement.concentration_per_liter) && return part.weight
-        @unpack μ,σ,p = part.stats_pars
-        V = measurement.flow_rate*measurement.concentration_per_liter
-        l1 =  likelihood(Gamma(rate_and_scale(μ,σ)...),V,part.state[2])
-        return l1
-    end
+
 
 
     subset = filter(x->x.date ≤ Date(2022,05,03),town_data)
@@ -67,29 +84,11 @@ for Town in Towns
     History = run_filter!(pfilter); 
 
 
-    function probabilities(History::FilterHistory)
-        NT = length(History.T)
-        N = sum(History.particles[1][1].state)+1
-        probs = zeros(Float64,(NT,Int(N),length(History.particles[1][1].state)))
-        for t in 1:NT
-            for p in History.particles[t]
-                for (j,s) in enumerate(Int.(p.state))
-                probs[t,s+1,j] += p.weight
-                end
-            end
-        end
-        return probs./sum(probs,dims=2)    
-    end
+
 
     probs = probabilities(History)
     infected = probs[:,1:200,3]
-    #=
-    heatmap(subset.date,0:(size(infected,2)-1),
-        infected', color = cgrad([RGBA(1,1,1),RGBA(20/255,66/255,129/255)]),
-                colorbar_title = "Probability", grid = false)
-    ylims!(0,40)
-    @df subset plot!(:date,:cases)
-    =#
+
     ForThibault = DataFrame(probs[:,:,3],:auto)
     ForThibault.date = subset.date
     CSV.write("output/$(Town)_probabilities.csv",ForThibault)
